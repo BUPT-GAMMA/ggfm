@@ -1,8 +1,8 @@
 import random
 import json
 import torch
-import dgl
-from dgl.data.utils import load_graphs, save_graphs
+# import dgl
+# from dgl.data.utils import load_graphs, save_graphs
 from pathlib import Path
 from tqdm import tqdm
 import pickle
