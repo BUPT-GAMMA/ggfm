@@ -19,6 +19,14 @@ LLM_DIM_DICT = {"ST": 768, "BERT": 768, "e5": 1024, "llama2_7b": 4096, "llama2_1
 
 
 class TextClassModel(torch.nn.Module):
+    """Text classification model that combines graph embeddings with class embeddings.
+    
+    Args:
+        model: The underlying graph neural network model
+        outdim (int): Output dimension of the model
+        task_dim (int): Dimension of the task/classification output
+        emb (torch.Tensor, optional): Pre-computed embeddings to use. Defaults to None.
+    """
     def __init__(self, model, outdim, task_dim, emb=None):
         super().__init__()
         self.model = model
@@ -39,6 +47,14 @@ class TextClassModel(torch.nn.Module):
 
 
 class AdaPoolClassModel(torch.nn.Module):
+    """Adaptive pooling classification model that performs weighted pooling of node embeddings.
+    
+    Args:
+        model: The underlying graph neural network model
+        outdim (int): Output dimension of the model
+        task_dim (int): Dimension of the task/classification output
+        emb (torch.Tensor, optional): Pre-computed embeddings to use. Defaults to None.
+    """
     def __init__(self, model, outdim, task_dim, emb=None):
         super().__init__()
         self.model = model
@@ -62,6 +78,16 @@ class AdaPoolClassModel(torch.nn.Module):
 
 
 class SingleHeadAtt(torch.nn.Module):
+    """Single-head attention layer implementation.
+    
+    Args:
+        dim (int): Dimension of the input features
+    
+    Attributes:
+        sqrt_dim (torch.Tensor): Square root of input dimension for scaling
+        Wk (nn.Parameter): Key projection matrix
+        Wq (nn.Parameter): Query projection matrix
+    """
     def __init__(self, dim):
         super().__init__()
         self.sqrt_dim = torch.sqrt(torch.tensor(dim))
@@ -78,6 +104,25 @@ class SingleHeadAtt(torch.nn.Module):
 
 
 class BinGraphModel(torch.nn.Module):
+    """Binary graph classification model that combines GNN with language model features.
+    
+    Args:
+        model: The underlying GNN model
+        llm_name (str): Name of the language model to use
+        outdim (int): Output dimension of the model
+        task_dim (int): Dimension of the task output
+        add_rwpe (int, optional): Random walk positional encoding dimension. Defaults to None.
+        dropout (float, optional): Dropout rate. Defaults to 0.0.
+        **kwargs: Additional keyword arguments
+    
+    Attributes:
+        model: The GNN model
+        llm_name (str): Name of the language model
+        outdim (int): Output dimension
+        llm_proj (nn.Linear): Projection layer for language model features
+        mlp (MLP): Multi-layer perceptron for classification
+        rwpe (AddRandomWalkPE, optional): Random walk positional encoding
+    """
     def __init__(self, model, llm_name, outdim, task_dim, add_rwpe=None, dropout=0.0, **kwargs):
         super().__init__()
         assert llm_name in LLM_DIM_DICT.keys()
@@ -132,9 +177,27 @@ class BinGraphModel(torch.nn.Module):
 
 
 class BinGraphAttModel(torch.nn.Module):
-    """
-    GNN model that use a single layer attention to pool final node representation across
-    layers.
+    """Binary graph classification model with attention-based pooling across layers.
+    
+    This model uses a single layer attention mechanism to pool node representations 
+    across different layers of the GNN.
+    
+    Args:
+        model: The underlying GNN model
+        llm_name (str): Name of the language model to use
+        outdim (int): Output dimension of the model
+        task_dim (int): Dimension of the task output
+        add_rwpe (int, optional): Random walk positional encoding dimension. Defaults to None.
+        dropout (float, optional): Dropout rate. Defaults to 0.0.
+        **kwargs: Additional keyword arguments
+    
+    Attributes:
+        model: The GNN model
+        llm_name (str): Name of the language model
+        outdim (int): Output dimension
+        llm_proj (nn.Linear): Projection layer for language model features
+        mlp (MLP): Multi-layer perceptron for classification
+        att (SingleHeadAtt): Single-head attention layer
     """
     def __init__(self, model, llm_name, outdim, task_dim, add_rwpe=None, dropout=0.0, **kwargs):
         super().__init__()
@@ -198,10 +261,26 @@ def mean_pooling(token_embeddings, attention_mask):
 
 
 class LLMModel(torch.nn.Module):
-    """
-    Large language model from transformers.
-    If peft is ture, use lora with pre-defined parameter setting for efficient fine-tuning.
-    quantization is set to 4bit and should be used in the most of the case to avoid OOM.
+    """Large Language Model wrapper for feature extraction and fine-tuning.
+    
+    This class provides functionality to load and use various language models with
+    optional quantization and parameter-efficient fine-tuning (LoRA).
+    
+    Args:
+        llm_name (str): Name of the language model to use
+        quantization (bool, optional): Whether to use 4-bit quantization. Defaults to True.
+        peft (bool, optional): Whether to use parameter-efficient fine-tuning. Defaults to True.
+        cache_dir (str, optional): Directory to cache models. Defaults to "cache_data/model".
+        max_length (int, optional): Maximum sequence length. Defaults to 500.
+    
+    Attributes:
+        llm_name (str): Name of the language model
+        quantization (bool): Whether quantization is enabled
+        indim (int): Input dimension of the model
+        cache_dir (str): Cache directory path
+        max_length (int): Maximum sequence length
+        model: The underlying language model
+        tokenizer: The tokenizer for the language model
     """
     def __init__(self, llm_name, quantization=True, peft=True, cache_dir="cache_data/model", max_length=500):
         super().__init__()
@@ -341,13 +420,16 @@ class LLMModel(torch.nn.Module):
 
 
 class TransformerModel(nn.Module):
-    """Transformer encoder model using Pytorch.
+    """Transformer encoder model implementation.
+    
     Args:
-        input_dim (int): Input dimension of the model.
-        num_layers (int): Number of transformer layer.
-        hidden_dim (int): Hidden dimension in transformer model.
-        num_heads (int): Number of head in each transformer layer.
-
+        input_dim (int): Input dimension of the model
+        num_layers (int): Number of transformer layers
+        hidden_dim (int): Hidden dimension in transformer layers
+        num_heads (int): Number of attention heads in each layer
+    
+    Attributes:
+        encoder (nn.TransformerEncoder): The transformer encoder
     """
 
     def __init__(
@@ -374,6 +456,23 @@ class TransformerModel(nn.Module):
 
 
 class PyGRGCNEdge(MultiLayerMessagePassing):
+    """PyTorch Geometric implementation of Relational GCN with edge features.
+    
+    This model implements a multi-layer message passing neural network that can handle
+    relational graphs with edge features.
+    
+    Args:
+        num_layers (int): Number of message passing layers
+        num_rels (int): Number of relation types
+        inp_dim (int): Input feature dimension
+        out_dim (int): Output feature dimension
+        drop_ratio (float, optional): Dropout ratio. Defaults to 0
+        JK (str, optional): Jumping knowledge mode. Defaults to "last"
+        batch_norm (bool, optional): Whether to use batch normalization. Defaults to True
+    
+    Attributes:
+        num_rels (int): Number of relation types
+    """
     def __init__(
         self,
         num_layers: int,
