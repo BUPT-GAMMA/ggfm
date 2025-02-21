@@ -1,0 +1,20 @@
+batch_size: 4
+eval_batch_size: 4
+dropout: 0.0
+lr: 0.0001
+num_layers: 5
+JK : "none"
+task_names:
+  - "arxiv_fs"
+  - "FB15K237_fs"
+  - "mol_fs"
+
+d_multiple:
+  - 10
+  - 10
+  - 0.5
+
+d_min_ratio:
+  - 5
+  - 5
+  - 0.5
