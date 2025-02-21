@@ -1,13 +1,10 @@
 import os
 import time
+from warnings import filterwarnings
 
 import numpy as np
 import torch
 from numpy.random import randint
-from torch import nn
-
-from warnings import filterwarnings
-
 from torch import nn
 
 from examples.gpt_gnn.lp_ft import to_torch, load_gnn
@@ -15,6 +12,7 @@ from ggfm.data import args_print, sample_subgraph, ndcg_at_k, mean_reciprocal_ra
 from ggfm.data.graph import *
 from ggfm.models import *
 from ggfm.models.pt_hgnn import GNN
+
 filterwarnings("ignore")
 
 import argparse
@@ -80,9 +78,10 @@ def parse_args():
     parser.add_argument('--clip', type=int, default=0.5,
                         help='Gradient Norm Clipping')
     args = parser.parse_args()
-    return  args
+    return args
 
-args=parse_args()
+
+args = parse_args()
 
 args_print(args)
 
@@ -107,7 +106,7 @@ def node_classification_sample(seed, pairs, time_range):
         (1) Sample batch_size number of output nodes (papers), get their time.
     '''
     np.random.seed(seed)
-    target_ids = np.random.choice(list(pairs.keys()), args.batch_size, replace = False)
+    target_ids = np.random.choice(list(pairs.keys()), args.batch_size, replace=False)
     target_info = []
     for target_id in target_ids:
         _, _time = pairs[target_id]
@@ -115,8 +114,8 @@ def node_classification_sample(seed, pairs, time_range):
     '''
         (2) Based on the seed nodes, sample a subgraph with 'sampled_depth' and 'sampled_number'
     '''
-    feature, times, edge_list, _, _ = sample_subgraph(graph, time_range, inp = {'paper': np.array(target_info)}, \
-                sampled_depth = args.sample_depth, sampled_number = args.sample_width)
+    feature, times, edge_list, _, _ = sample_subgraph(graph, time_range, inp={'paper': np.array(target_info)}, \
+                                                      sampled_depth=args.sample_depth, sampled_number=args.sample_width)
 
     '''
         (3) Mask out the edge between the output target nodes (paper) with output source nodes (L2 field)
@@ -136,7 +135,8 @@ def node_classification_sample(seed, pairs, time_range):
     '''
         (4) Transform the subgraph into torch Tensor (edge_index is in format of pytorch_geometric)
     '''
-    node_feature, node_type, edge_time, edge_index, edge_type, node_dict, edge_dict = to_torch(feature, times, edge_list, graph)
+    node_feature, node_type, edge_time, edge_index, edge_type, node_dict, edge_dict = to_torch(feature, times,
+                                                                                               edge_list, graph)
     '''
         (5) Prepare the labels for each output target node (paper), and their index in sampled graph.
             (node_dict[type][0] stores the start index of a specific type of nodes)
@@ -153,7 +153,8 @@ def node_classification_sample(seed, pairs, time_range):
     ylabel /= ylabel.sum(axis=1).reshape(-1, 1)
     x_ids = np.arange(args.batch_size) + node_dict['paper'][0]
     return node_feature, node_type, edge_time, edge_index, edge_type, x_ids, ylabel
-    
+
+
 def prepare_data():
     '''
     Sampled and prepare training and validation data without parallelization.
@@ -162,7 +163,7 @@ def prepare_data():
     for _ in np.arange(args.n_batch):  # 16个任务
         train_data.append(node_classification_sample(randint(), sel_train_pairs, train_range))
     valid_data = node_classification_sample(randint(), sel_valid_pairs, valid_range)
-    
+
     return train_data, valid_data
 
 
@@ -220,8 +221,6 @@ def init():
                        np.random.choice(list(valid_pairs.keys()), int(len(valid_pairs) * args.data_percentage),
                                         replace=False)}
     # print("Done!!!")
-
-
 
 
 def train():
@@ -345,6 +344,7 @@ def train():
         correct = (pred_labels == torch.argmax(torch.tensor(ylabel), dim=1).to(device)).sum().item()  # 计算正确预测的数量
         accuracy = correct / len(ylabel)  # 计算准确率
         print(f"accuracy: {accuracy}")
+
 
 if __name__ == '__main__':
     init()

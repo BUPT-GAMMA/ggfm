@@ -1,13 +1,10 @@
 import os
 import time
+from warnings import filterwarnings
 
 import numpy as np
 import torch
 from numpy.random import randint
-from torch import nn
-
-from warnings import filterwarnings
-
 from torch import nn
 
 from examples.gpt_gnn.lp_ft import to_torch, load_gnn
@@ -99,7 +96,8 @@ print('Finish Loading Graph Data!')
 
 
 def randint():
-    return np.random.randint(2**32 - 1)
+    return np.random.randint(2 ** 32 - 1)
+
 
 def node_classification_sample(seed, pairs, time_range):
     '''
@@ -219,8 +217,6 @@ def init():
     sel_valid_pairs = {p: valid_pairs[p] for p in
                        np.random.choice(list(valid_pairs.keys()), int(len(valid_pairs) * args.data_percentage),
                                         replace=False)}
-
-
 
 
 def train():

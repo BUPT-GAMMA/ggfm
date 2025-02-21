@@ -1,48 +1,26 @@
-# Adopted from https://github.com/lm-sys/FastChat. Below is the original copyright:
-# Adopted from tatsu-lab@stanford_alpaca. Below is the original copyright:
-#    Copyright 2023 Rohan Taori, Ishaan Gulrajani, Tianyi Zhang, Yann Dubois, Xuechen Li
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-import dataclasses
-import os
 import copy
-from dataclasses import dataclass, field
+import dataclasses
 import json
 import logging
-import pathlib
+import os
+from dataclasses import dataclass, field
 from enum import auto, Enum
 from typing import Dict, Optional, Sequence, List
 
 import torch
-
-import transformers
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-
-# from graphgpt import conversation as conversation_lib
-# from graphgpt.model import *
-
-from PIL import Image
 import torch.nn as nn
-from torch_geometric.data import Data
-from lightning.pytorch.strategies import FSDPStrategy
-from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-from transformers.models.llama.modeling_llama import LlamaDecoderLayer
-from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch import LightningModule, Trainer, seed_everything
-from ggfm.models.graphgpt import GraphGPT_pl
+import transformers
+from lightning.pytorch import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.callbacks.callback import Callback
+from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.strategies import FSDPStrategy
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset
+from torch_geometric.data import Data
+from transformers.models.llama.modeling_llama import LlamaDecoderLayer
+
+from ggfm.models.graphgpt import GraphGPT_pl
 
 # TODO: import and use code from ../data/dataset.py
 
@@ -112,7 +90,7 @@ class ModelArguments:
     freeze_backbone: bool = field(default=False)
     tune_graph_mlp_adapter: bool = field(default=False)
     graph_tower: Optional[str] = field(default=None)
-    graph_select_layer: Optional[int] = field(default=-1)   # default to the last layer
+    graph_select_layer: Optional[int] = field(default=-1)  # default to the last layer
     pretrain_graph_mlp_adapter: Optional[str] = field(default=None)
     use_graph_start_end: bool = field(default=False)
     model_save_name: Optional[str] = field(default="model_{epoch}-{step}")
@@ -142,7 +120,7 @@ class TrainingArguments:
         default=512,
         metadata={
             "help":
-            "Maximum sequence length. Sequences will be right padded (and possibly truncated)."
+                "Maximum sequence length. Sequences will be right padded (and possibly truncated)."
         },
     )
     double_quant: bool = field(
@@ -168,18 +146,18 @@ class TrainingArguments:
     lora_dropout: float = 0.05
     lora_weight_path: str = ""
     lora_bias: str = "none"
-    disable_tqdm: bool =False
+    disable_tqdm: bool = False
 
     gpus: Optional[str] = field(default='0,1')
     resume: Optional[str] = field(default=None)
 
     adam_epsilon: float = field(default=1e-8)
-    warmup_steps:int = field(default=1000)
-    num_workers:int = field(default=16)
+    warmup_steps: int = field(default=1000)
+    num_workers: int = field(default=16)
 
-    bf16: bool = field(default=False) 
-    fp16: bool = field(default=False) 
-    output_dir: str = field(default='./checkpoints/graphchat-gt-graphmatch-7b') 
+    bf16: bool = field(default=False)
+    fp16: bool = field(default=False)
+    output_dir: str = field(default='./checkpoints/graphchat-gt-graphmatch-7b')
     num_train_epochs: int = field(default=3)
     per_device_train_batch_size: int = field(default=1)
     per_device_eval_batch_size: int = field(default=1)
@@ -193,10 +171,9 @@ class TrainingArguments:
     warmup_ratio: float = field(default=0.03)
     lr_scheduler_type: str = field(default='cosine')
     logging_steps: int = field(default=1)
-    tf32: bool = field(default=True) 
+    tf32: bool = field(default=True)
     gradient_checkpointing: bool = field(default=True)
     report_to: str = field(default='wandb')
-    
 
 
 def unwrap_model(model: nn.Module) -> nn.Module:
@@ -325,6 +302,7 @@ class conversation_lib:
                                 result = Image.new(pil_img.mode, (height, height), background_color)
                                 result.paste(pil_img, ((height - width) // 2, 0))
                                 return result
+
                         image = expand2square(image)
                     elif image_process_mode == "Crop":
                         pass
@@ -419,20 +397,20 @@ conv_v1 = conversation_lib(
     messages=(
         ("Human", "Give three tips for staying healthy."),
         ("Assistant",
-            "Sure, here are three tips for staying healthy:\n"
-            "1. Exercise regularly: Regular physical activity can help improve your overall health and wellbeing. "
-            "It can also help reduce your risk of chronic conditions such as obesity, diabetes, heart disease, "
-            "and certain cancers. Aim for at least 150 minutes of moderate-intensity aerobic exercise or "
-            "75 minutes of vigorous-intensity aerobic exercise per week, along with muscle-strengthening "
-            "activities at least two days per week.\n"
-            "2. Eat a balanced diet: Eating a balanced diet that is rich in fruits, "
-            "vegetables, whole grains, lean proteins, and healthy fats can help support "
-            "your overall health. Try to limit your intake of processed and high-sugar foods, "
-            "and aim to drink plenty of water throughout the day.\n"
-            "3. Get enough sleep: Getting enough quality sleep is essential for your physical "
-            "and mental health. Adults should aim for seven to nine hours of sleep per night. "
-            "Establish a regular sleep schedule and try to create a relaxing bedtime routine to "
-            "help improve the quality of your sleep.")
+         "Sure, here are three tips for staying healthy:\n"
+         "1. Exercise regularly: Regular physical activity can help improve your overall health and wellbeing. "
+         "It can also help reduce your risk of chronic conditions such as obesity, diabetes, heart disease, "
+         "and certain cancers. Aim for at least 150 minutes of moderate-intensity aerobic exercise or "
+         "75 minutes of vigorous-intensity aerobic exercise per week, along with muscle-strengthening "
+         "activities at least two days per week.\n"
+         "2. Eat a balanced diet: Eating a balanced diet that is rich in fruits, "
+         "vegetables, whole grains, lean proteins, and healthy fats can help support "
+         "your overall health. Try to limit your intake of processed and high-sugar foods, "
+         "and aim to drink plenty of water throughout the day.\n"
+         "3. Get enough sleep: Getting enough quality sleep is essential for your physical "
+         "and mental health. Adults should aim for seven to nine hours of sleep per night. "
+         "Establish a regular sleep schedule and try to create a relaxing bedtime routine to "
+         "help improve the quality of your sleep.")
     ),
     offset=2,
     sep_style=SeparatorStyle.SINGLE,
@@ -446,24 +424,24 @@ conv_v1_2 = conversation_lib(
     messages=(
         ("Human", "What are the key differences between renewable and non-renewable energy sources?"),
         ("Assistant",
-            "Renewable energy sources are those that can be replenished naturally in a relatively "
-            "short amount of time, such as solar, wind, hydro, geothermal, and biomass. "
-            "Non-renewable energy sources, on the other hand, are finite and will eventually be "
-            "depleted, such as coal, oil, and natural gas. Here are some key differences between "
-            "renewable and non-renewable energy sources:\n"
-            "1. Availability: Renewable energy sources are virtually inexhaustible, while non-renewable "
-            "energy sources are finite and will eventually run out.\n"
-            "2. Environmental impact: Renewable energy sources have a much lower environmental impact "
-            "than non-renewable sources, which can lead to air and water pollution, greenhouse gas emissions, "
-            "and other negative effects.\n"
-            "3. Cost: Renewable energy sources can be more expensive to initially set up, but they typically "
-            "have lower operational costs than non-renewable sources.\n"
-            "4. Reliability: Renewable energy sources are often more reliable and can be used in more remote "
-            "locations than non-renewable sources.\n"
-            "5. Flexibility: Renewable energy sources are often more flexible and can be adapted to different "
-            "situations and needs, while non-renewable sources are more rigid and inflexible.\n"
-            "6. Sustainability: Renewable energy sources are more sustainable over the long term, while "
-            "non-renewable sources are not, and their depletion can lead to economic and social instability.\n")
+         "Renewable energy sources are those that can be replenished naturally in a relatively "
+         "short amount of time, such as solar, wind, hydro, geothermal, and biomass. "
+         "Non-renewable energy sources, on the other hand, are finite and will eventually be "
+         "depleted, such as coal, oil, and natural gas. Here are some key differences between "
+         "renewable and non-renewable energy sources:\n"
+         "1. Availability: Renewable energy sources are virtually inexhaustible, while non-renewable "
+         "energy sources are finite and will eventually run out.\n"
+         "2. Environmental impact: Renewable energy sources have a much lower environmental impact "
+         "than non-renewable sources, which can lead to air and water pollution, greenhouse gas emissions, "
+         "and other negative effects.\n"
+         "3. Cost: Renewable energy sources can be more expensive to initially set up, but they typically "
+         "have lower operational costs than non-renewable sources.\n"
+         "4. Reliability: Renewable energy sources are often more reliable and can be used in more remote "
+         "locations than non-renewable sources.\n"
+         "5. Flexibility: Renewable energy sources are often more flexible and can be adapted to different "
+         "situations and needs, while non-renewable sources are more rigid and inflexible.\n"
+         "6. Sustainability: Renewable energy sources are more sustainable over the long term, while "
+         "non-renewable sources are not, and their depletion can lead to economic and social instability.\n")
     ),
     offset=2,
     sep_style=SeparatorStyle.SINGLE,
@@ -472,7 +450,7 @@ conv_v1_2 = conversation_lib(
 
 conv_vicuna_v1_1 = conversation_lib(
     system="A chat between a curious user and an artificial intelligence assistant. "
-    "The assistant gives helpful, detailed, and polite answers to the user's questions.",
+           "The assistant gives helpful, detailed, and polite answers to the user's questions.",
     roles=("USER", "ASSISTANT"),
     version="v1",
     messages=(),
@@ -609,7 +587,6 @@ conv_templates = {
     "llava_v1": conv_llava_v1,
     "graphchat_v1": conv_graphchat_v1,
 
-
     # fastchat
     "v1": conv_v1_2,
     "bair_v1": conv_bair_v1,
@@ -617,7 +594,6 @@ conv_templates = {
     "mpt": conv_mpt,
     "mpt_text": conv_mpt_text,
 }
-
 
 if __name__ == "__main__":
     print(default_conversation.get_prompt())
@@ -639,9 +615,10 @@ class SaveGraphProjectorCallback(Callback):
 
         # 确保输出目录存在
         os.makedirs(self.output_dir, exist_ok=True)
-        
+
         # 保存 graph projector 的权重
         torch.save(weight_to_save, os.path.join(self.output_dir, 'graph_projector.bin'))
+
 
 def maybe_zero_3(param, ignore_status=False, name=None):
     from deepspeed import zero
@@ -699,8 +676,7 @@ def find_all_linear_names(model):
             names = name.split('.')
             lora_module_names.add(names[0] if len(names) == 1 else names[-1])
 
-
-    if 'lm_head' in lora_module_names: # needed for 16-bit
+    if 'lm_head' in lora_module_names:  # needed for 16-bit
         lora_module_names.remove('lm_head')
     return list(lora_module_names)
 
@@ -724,9 +700,9 @@ def safe_save_model_for_hf_trainer(trainer: transformers.Trainer,
 
 
 def smart_tokenizer_and_embedding_resize(
-    special_tokens_dict: Dict,
-    tokenizer: transformers.PreTrainedTokenizer,
-    model: transformers.PreTrainedModel,
+        special_tokens_dict: Dict,
+        tokenizer: transformers.PreTrainedTokenizer,
+        model: transformers.PreTrainedModel,
 ):
     """Resize tokenizer and embedding.
 
@@ -782,7 +758,7 @@ def _mask_targets(target, tokenized_lens, speakers):
     target[:cur_idx] = IGNORE_INDEX
     for tokenized_len, speaker in zip(tokenized_lens, speakers):
         if speaker == "human":
-            target[cur_idx+2:cur_idx + tokenized_len] = IGNORE_INDEX
+            target[cur_idx + 2:cur_idx + tokenized_len] = IGNORE_INDEX
         cur_idx += tokenized_len
 
 
@@ -808,9 +784,9 @@ def _add_speaker_and_signal(header, source, get_conversation=True):
 
 
 def preprocess_graph(
-    sources: Sequence[str],
-    graph_cfg: dict,
-    cur_token_len: int,
+        sources: Sequence[str],
+        graph_cfg: dict,
+        cur_token_len: int,
 ) -> Dict:
     is_graph = graph_cfg['is_graph']
     # image_token_len = multimodal_cfg['image_token_len']
@@ -822,7 +798,8 @@ def preprocess_graph(
         if graph_cfg['sep_graph_conv_front']:
             assert DEFAULT_GRAPH_TOKEN in source[0]['value']
             source[0]['value'] = source[0]['value'].replace(DEFAULT_GRAPH_TOKEN, '').strip()
-            source[0]['value'] = DEFAULT_GRAPH_TOKEN + conversation_lib.default_conversation.sep + conversation_lib.default_conversation.roles[0] + ": " + source[0]['value']
+            source[0]['value'] = DEFAULT_GRAPH_TOKEN + conversation_lib.default_conversation.sep + \
+                                 conversation_lib.default_conversation.roles[0] + ": " + source[0]['value']
         for sentence in source:
             replace_token = DEFAULT_GRAPH_PATCH_TOKEN * graph_token_len
             if graph_cfg['use_graph_start_end']:
@@ -831,11 +808,12 @@ def preprocess_graph(
 
     return sources
 
+
 def preprocess_graph_LP(
-    sources: Sequence[str],
-    graph_cfg: dict,
-    cur_token_len_1: int,
-    cur_token_len_2: int,
+        sources: Sequence[str],
+        graph_cfg: dict,
+        cur_token_len_1: int,
+        cur_token_len_2: int,
 ) -> Dict:
     is_graph = graph_cfg['is_graph']
     # image_token_len = multimodal_cfg['image_token_len']
@@ -849,7 +827,8 @@ def preprocess_graph_LP(
         if graph_cfg['sep_graph_conv_front']:
             assert DEFAULT_GRAPH_TOKEN in source[0]['value']
             source[0]['value'] = source[0]['value'].replace(DEFAULT_GRAPH_TOKEN, '').strip()
-            source[0]['value'] = DEFAULT_GRAPH_TOKEN + conversation_lib.default_conversation.sep + conversation_lib.default_conversation.roles[0] + ": " + source[0]['value']
+            source[0]['value'] = DEFAULT_GRAPH_TOKEN + conversation_lib.default_conversation.sep + \
+                                 conversation_lib.default_conversation.roles[0] + ": " + source[0]['value']
         for sentence in source:
             replace_token_1 = DEFAULT_GRAPH_PATCH_TOKEN * graph_token_len_1
             replace_token_2 = DEFAULT_GRAPH_PATCH_TOKEN * graph_token_len_2
@@ -859,12 +838,15 @@ def preprocess_graph_LP(
 
             if DEFAULT_GRAPH_TOKEN in sentence["value"]:
                 first_index = sentence["value"].find(DEFAULT_GRAPH_TOKEN)
-                sentence["value"] = sentence["value"][:first_index] + replace_token_1 + sentence["value"][first_index+len(DEFAULT_GRAPH_TOKEN):]
+                sentence["value"] = sentence["value"][:first_index] + replace_token_1 + sentence["value"][
+                                                                                        first_index + len(
+                                                                                            DEFAULT_GRAPH_TOKEN):]
 
                 # 替换第二个<graph>为B
                 second_index = sentence["value"].find(DEFAULT_GRAPH_TOKEN)
-                sentence["value"] = sentence["value"][:second_index] + replace_token_2 + sentence["value"][second_index+len(DEFAULT_GRAPH_TOKEN):]
-
+                sentence["value"] = sentence["value"][:second_index] + replace_token_2 + sentence["value"][
+                                                                                         second_index + len(
+                                                                                             DEFAULT_GRAPH_TOKEN):]
 
             # sentence["value"] = sentence["value"].replace(DEFAULT_GRAPH_TOKEN, replace_token)
 
@@ -874,8 +856,8 @@ def preprocess_graph_LP(
 
 
 def preprocess_v1(
-    sources,
-    tokenizer: transformers.PreTrainedTokenizer,
+        sources,
+        tokenizer: transformers.PreTrainedTokenizer,
 ) -> Dict:
     conv = conversation_lib.default_conversation.copy()
     roles = {"human": conv.roles[0], "gpt": conv.roles[1]}
@@ -925,7 +907,7 @@ def preprocess_v1(
             round_len = len(tokenizer(rou).input_ids)
             instruction_len = len(tokenizer(parts[0]).input_ids) - 2
 
-            target[cur_len : cur_len + instruction_len] = IGNORE_INDEX
+            target[cur_len: cur_len + instruction_len] = IGNORE_INDEX
 
             cur_len += round_len
         target[cur_len:] = IGNORE_INDEX
@@ -943,9 +925,10 @@ def preprocess_v1(
         labels=targets,
     )
 
+
 def preprocess_mpt(
-    sources,
-    tokenizer: transformers.PreTrainedTokenizer,
+        sources,
+        tokenizer: transformers.PreTrainedTokenizer,
 ) -> Dict:
     conv = conversation_lib.default_conversation.copy()
     roles = {"human": conv.roles[0], "gpt": conv.roles[1]}
@@ -981,9 +964,9 @@ def preprocess_mpt(
         total_len = int(target.ne(tokenizer.pad_token_id).sum())
 
         rounds = conversation.split(conv.sep)
-        re_rounds = [conv.sep.join(rounds[:3])] # system + user + gpt
+        re_rounds = [conv.sep.join(rounds[:3])]  # system + user + gpt
         for conv_idx in range(3, len(rounds), 2):
-            re_rounds.append(conv.sep.join(rounds[conv_idx:conv_idx+2]))    # user + gpt
+            re_rounds.append(conv.sep.join(rounds[conv_idx:conv_idx + 2]))  # user + gpt
         cur_len = 0
         target[:cur_len] = IGNORE_INDEX
         for i, rou in enumerate(re_rounds):
@@ -996,7 +979,7 @@ def preprocess_mpt(
             parts[0] += sep
             round_len = len(tokenizer(rou).input_ids) + len(tokenizer(conv.sep).input_ids)
             instruction_len = len(tokenizer(parts[0]).input_ids)
-            target[cur_len : cur_len + instruction_len] = IGNORE_INDEX
+            target[cur_len: cur_len + instruction_len] = IGNORE_INDEX
 
             cur_len += round_len
         target[cur_len:] = IGNORE_INDEX
@@ -1016,8 +999,8 @@ def preprocess_mpt(
 
 
 def preprocess(
-    sources: Sequence[str],
-    tokenizer: transformers.PreTrainedTokenizer,
+        sources: Sequence[str],
+        tokenizer: transformers.PreTrainedTokenizer,
 ) -> Dict:
     """
     Given a list of sources, each is a conversation list. This transform:
@@ -1077,8 +1060,8 @@ class LazySupervisedDataset(Dataset):
 
     def __init__(self, data_path: str,
                  tokenizer: transformers.PreTrainedTokenizer,
-                 graph_cfg: dict, 
-                 **kwargs,):
+                 graph_cfg: dict,
+                 **kwargs, ):
         super(LazySupervisedDataset, self).__init__()
         logging.warning("Loading data...")
         list_data_dict = json.load(open(data_path, "r"))
@@ -1100,38 +1083,38 @@ class LazySupervisedDataset(Dataset):
         assert len(sources) == 1, "Don't know why it is wrapped to a list"  # FIXME
 
         task_type = self.list_data_dict[i]['id'].split("_")[-1]
-        if task_type != 'LP': 
+        if task_type != 'LP':
             if 'graph' in sources[0]:
                 graph_dict = self.list_data_dict[i]['graph']
                 graph_edge_index = torch.Tensor(copy.deepcopy(graph_dict['edge_index'])).long()
                 graph_node_list = copy.deepcopy(graph_dict['node_list'])
                 target_node = copy.deepcopy(graph_dict['node_idx'])
                 graph_type = copy.deepcopy(self.list_data_dict[i]['id']).split('_')[0]
-                graph_node_rep = self.graph_data_all[graph_type].x[graph_node_list] ## 
-                
+                graph_node_rep = self.graph_data_all[graph_type].x[graph_node_list]  ##
+
                 cur_token_len = len(graph_node_rep)
                 sources = preprocess_graph(
                     copy.deepcopy([e["conversations"] for e in sources]),
                     self.graph_cfg, cur_token_len)
             else:
                 sources = copy.deepcopy([e["conversations"] for e in sources])
-        else: 
+        else:
             if 'graph' in sources[0]:
                 graph_dict = self.list_data_dict[i]['graph']
                 graph_edge_index_1 = torch.Tensor(copy.deepcopy(graph_dict['edge_index_1'])).long()
                 graph_node_list_1 = copy.deepcopy(graph_dict['node_list_1'])
                 target_node_1 = copy.deepcopy(graph_dict['node_idx_1'])
                 graph_type = copy.deepcopy(self.list_data_dict[i]['id']).split('_')[0]
-                graph_node_rep_1 = self.graph_data_all[graph_type].x[graph_node_list_1] ## 
-                
-                cur_token_len_1 = len(graph_node_rep_1)   # FIXME: 14 is hardcoded patch size
+                graph_node_rep_1 = self.graph_data_all[graph_type].x[graph_node_list_1]  ##
+
+                cur_token_len_1 = len(graph_node_rep_1)  # FIXME: 14 is hardcoded patch size
 
                 graph_edge_index_2 = torch.Tensor(copy.deepcopy(graph_dict['edge_index_2'])).long()
                 graph_node_list_2 = copy.deepcopy(graph_dict['node_list_2'])
                 target_node_2 = copy.deepcopy(graph_dict['node_idx_2'])
-                graph_node_rep_2 = self.graph_data_all[graph_type].x[graph_node_list_2] ## 
-                
-                cur_token_len_2 = len(graph_node_rep_2)   # FIXME: 14 is hardcoded patch size
+                graph_node_rep_2 = self.graph_data_all[graph_type].x[graph_node_list_2]  ##
+
+                cur_token_len_2 = len(graph_node_rep_2)  # FIXME: 14 is hardcoded patch size
                 sources = preprocess_graph_LP(
                     copy.deepcopy([e["conversations"] for e in sources]),
                     self.graph_cfg, cur_token_len_1, cur_token_len_2)
@@ -1145,40 +1128,46 @@ class LazySupervisedDataset(Dataset):
                              labels=data_dict["labels"][0])
 
         # image exist in the data
-        if task_type != 'LP': 
+        if task_type != 'LP':
             if 'graph' in self.list_data_dict[i]:
                 # data_dict['graph_node'] = graph_node_rep
                 # data_dict['graph_edge'] = graph_edge_index
                 # data_dict['target_node'] = target_node
-                data_dict['graph_data'] = Data(graph_node = graph_node_rep, edge_index=graph_edge_index, target_node = torch.tensor([target_node]))
+                data_dict['graph_data'] = Data(graph_node=graph_node_rep, edge_index=graph_edge_index,
+                                               target_node=torch.tensor([target_node]))
 
             elif self.graph_cfg['is_graph']:
                 # image does not exist in the data, but the model is multimodal
                 node_feas = self.graph_cfg['graph_processor'].node_feas
-                data_dict['graph_data'] = Data(graph_node = torch.zeros(3, node_feas), edge_index=torch.zeros(2, 3), target_node = torch.tensor([0]))
-        else: 
+                data_dict['graph_data'] = Data(graph_node=torch.zeros(3, node_feas), edge_index=torch.zeros(2, 3),
+                                               target_node=torch.tensor([0]))
+        else:
             if 'graph' in self.list_data_dict[i]:
                 # data_dict['graph_node'] = graph_node_rep
                 # data_dict['graph_edge'] = graph_edge_index
                 # data_dict['target_node'] = target_node
                 data_dict['graph_data'] = {
-                    'graph_1': Data(graph_node = graph_node_rep_1, edge_index=graph_edge_index_1, target_node = torch.tensor([target_node_1])), 
-                    'graph_2': Data(graph_node = graph_node_rep_2, edge_index=graph_edge_index_2, target_node = torch.tensor([target_node_2]))
-                    }
+                    'graph_1': Data(graph_node=graph_node_rep_1, edge_index=graph_edge_index_1,
+                                    target_node=torch.tensor([target_node_1])),
+                    'graph_2': Data(graph_node=graph_node_rep_2, edge_index=graph_edge_index_2,
+                                    target_node=torch.tensor([target_node_2]))
+                }
 
             elif self.graph_cfg['is_graph']:
                 # image does not exist in the data, but the model is multimodal
                 node_feas = self.graph_cfg['graph_processor'].node_feas
-                data_dict['graph_data'] = Data(graph_node = torch.zeros(3, node_feas), edge_index=torch.zeros(2, 3), target_node = torch.tensor([0]))
+                data_dict['graph_data'] = Data(graph_node=torch.zeros(3, node_feas), edge_index=torch.zeros(2, 3),
+                                               target_node=torch.tensor([0]))
         return data_dict
-    
+
+
 class LazySupervisedDataset_back(Dataset):
     """Dataset for supervised fine-tuning."""
 
     def __init__(self, data_path: str,
                  tokenizer: transformers.PreTrainedTokenizer,
-                 graph_cfg: dict, 
-                 **kwargs,):
+                 graph_cfg: dict,
+                 **kwargs, ):
         super(LazySupervisedDataset, self).__init__()
         logging.warning("Loading data...")
         list_data_dict = json.load(open(data_path, "r"))
@@ -1204,9 +1193,9 @@ class LazySupervisedDataset_back(Dataset):
             graph_node_list = copy.deepcopy(graph_dict['node_list'])
             target_node = copy.deepcopy(graph_dict['node_idx'])
             graph_type = copy.deepcopy(self.list_data_dict[i]['id']).split('_')[0]
-            graph_node_rep = self.graph_data_all[graph_type].x[graph_node_list] ## 
-            
-            cur_token_len = len(graph_node_rep)   # FIXME: 14 is hardcoded patch size
+            graph_node_rep = self.graph_data_all[graph_type].x[graph_node_list]  ##
+
+            cur_token_len = len(graph_node_rep)  # FIXME: 14 is hardcoded patch size
             sources = preprocess_graph(
                 copy.deepcopy([e["conversations"] for e in sources]),
                 self.graph_cfg, cur_token_len)
@@ -1224,12 +1213,14 @@ class LazySupervisedDataset_back(Dataset):
             # data_dict['graph_node'] = graph_node_rep
             # data_dict['graph_edge'] = graph_edge_index
             # data_dict['target_node'] = target_node
-            data_dict['graph_data'] = Data(graph_node = graph_node_rep, edge_index=graph_edge_index, target_node = torch.tensor([target_node]))
+            data_dict['graph_data'] = Data(graph_node=graph_node_rep, edge_index=graph_edge_index,
+                                           target_node=torch.tensor([target_node]))
 
         elif self.graph_cfg['is_graph']:
             # image does not exist in the data, but the model is multimodal
             node_feas = self.graph_cfg['graph_processor'].node_feas
-            data_dict['graph_data'] = Data(graph_node = torch.zeros(3, node_feas), edge_index=torch.zeros(2, 3), target_node = torch.tensor([0]))
+            data_dict['graph_data'] = Data(graph_node=torch.zeros(3, node_feas), edge_index=torch.zeros(2, 3),
+                                           target_node=torch.tensor([0]))
         return data_dict
 
 
@@ -1285,17 +1276,18 @@ def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                     graph_token_len=data_args.graph_token_len,
                                     graph_content=data_args.graph_content,
                                     use_graph_start_end=getattr(data_args, 'use_graph_start_end', False)
-                                    ), 
-                                    graph_data_path = data_args.graph_data_path)
+                                ),
+                                graph_data_path=data_args.graph_data_path)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
 
-    train_dataloader = DataLoader(train_dataset, 
+    train_dataloader = DataLoader(train_dataset,
                                   batch_size=training_args.per_device_train_batch_size,
-                                    num_workers=training_args.num_workers,
+                                  num_workers=training_args.num_workers,
                                   collate_fn=data_collator,
                                   prefetch_factor=4,
                                   pin_memory=True)
     return train_dataloader, None
+
 
 def train():
     parser = transformers.HfArgumentParser(
@@ -1307,56 +1299,57 @@ def train():
     batch_size = training_args.real_batch_size
     devices = training_args.gpus
     num_devices = len(devices)
-    gradient_accumulation_steps = max(1,batch_size // (training_args.per_device_train_batch_size*num_devices))
+    gradient_accumulation_steps = max(1, batch_size // (training_args.per_device_train_batch_size * num_devices))
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=training_args.cache_dir,
-            model_max_length=training_args.model_max_length,
-            padding_side="right",
-            use_fast=False
-        )
+        model_args.model_name_or_path,
+        cache_dir=training_args.cache_dir,
+        model_max_length=training_args.model_max_length,
+        padding_side="right",
+        use_fast=False
+    )
 
     if model_args.version == "v1":
         tokenizer.pad_token = tokenizer.unk_token
         conversation_lib.default_conversation = conversation_lib.conv_templates["vicuna_v1_1"]
-    else: 
+    else:
         raise ValueError
 
     model = GraphGPT_pl(training_args, model_args, data_args, tokenizer)
 
     train_dataloader, _ = make_supervised_data_module(tokenizer=tokenizer,
-                                              data_args=data_args, training_args=training_args)
+                                                      data_args=data_args, training_args=training_args)
     checkpoint_callback = ModelCheckpoint(
-            dirpath=training_args.output_dir,
-            filename=model_args.model_save_name,
-            monitor="loss",
-            save_top_k=1,
-            save_last=True,
-        )
+        dirpath=training_args.output_dir,
+        filename=model_args.model_save_name,
+        monitor="loss",
+        save_top_k=1,
+        save_last=True,
+    )
 
-    if training_args.strategy == 'fsdp': 
+    if training_args.strategy == 'fsdp':
         strategy = FSDPStrategy(
-        auto_wrap_policy={LlamaDecoderLayer},
-        activation_checkpointing_policy={LlamaDecoderLayer},
-        state_dict_type="full",
-        limit_all_gathers=True,
-        cpu_offload=False,
-        # **kwargs
+            auto_wrap_policy={LlamaDecoderLayer},
+            activation_checkpointing_policy={LlamaDecoderLayer},
+            state_dict_type="full",
+            limit_all_gathers=True,
+            cpu_offload=False,
+            # **kwargs
         )
-    else: 
+    else:
         strategy = training_args.strategy
 
-    wandb_logger = WandbLogger(save_dir=training_args.output_dir, project="GraphGPTv1", offline=True, name=model_args.model_save_name)
+    wandb_logger = WandbLogger(save_dir=training_args.output_dir, project="GraphGPTv1", offline=True,
+                               name=model_args.model_save_name)
     model_precision = ('16' if training_args.fp16 else ('bf16' if training_args.bf16 else '32'))
     # print('************* epoch:', training_args.num_train_epochs)
-    trainer = Trainer(default_root_dir=training_args.output_dir, max_epochs=int(training_args.num_train_epochs), 
-                    accumulate_grad_batches=gradient_accumulation_steps,
-                    accelerator="gpu", devices=devices, 
-                    strategy=strategy,
-                    logger = wandb_logger, 
-                    precision=model_precision,
-                    callbacks=[checkpoint_callback])
+    trainer = Trainer(default_root_dir=training_args.output_dir, max_epochs=int(training_args.num_train_epochs),
+                      accumulate_grad_batches=gradient_accumulation_steps,
+                      accelerator="gpu", devices=devices,
+                      strategy=strategy,
+                      logger=wandb_logger,
+                      precision=model_precision,
+                      callbacks=[checkpoint_callback])
     resume = training_args.resume
 
     # for name, param in model.named_parameters():
