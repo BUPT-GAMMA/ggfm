@@ -1,2 +1,2 @@
-ggfm==0.1.4
+ggfm==0.1.7
 sphinx_rtd_theme
