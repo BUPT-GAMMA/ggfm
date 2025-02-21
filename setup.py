@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="ggfm",  # package name
-    version="0.1.6",
+    version="0.1.8",
     packages=find_packages(),
     license='Apache-2.0',
     python_requires='>=3.8',                  
