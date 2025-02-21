@@ -1,4 +1,4 @@
-from .graph import Graph, RenameUnpickler, renamed_load, HomogeneousGraph
+from .graph import Graph, renamed_load, HomogeneousGraph
 from .hgsampling import sample_subgraph, feature_extractor
 from .random_walk import construct_link_and_node, random_walk_based_corpus_construction, get_type_id
 from .utils import open_pkl_file, open_txt_file, save_pkl_file, save_txt_file, mean_reciprocal_rank, ndcg_at_k, args_print,download_url,extract_zip,download_google_url,read_npz, get_train_val_test_split, generate_masks
