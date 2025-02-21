@@ -1,0 +1,27 @@
+num_bases: 4
+emb_dim: 768
+num_layers: 6
+dropout: 0.0
+JK: "last"
+lr: 0.0001
+l2: 0
+num_epochs: 0
+batch_size: 4
+num_workers: 4
+seed: 1
+data_path:
+offline_log: True
+exp_name: ""
+train_sample_size: 100
+eval_sample_size: 100
+rwpe:
+task_names:
+  - arxiv
+llm_name: "ST"
+llm_b_size: 1
+load_texts: False
+max_nodes_per_hop: 100
+load_best: False
+test_rep: 1
+val_interval: 1
+checkpoint: 'lightning_logs/version_6/checkpoints/epoch=0-step=944.ckpt'
