@@ -23,6 +23,7 @@ Welcome to GGFM's documentation!
    :glob:
    
    api/ggfm.data
+   api/ggfm.dataset
    api/ggfm.conv
    api/ggfm.models
    api/ggfm.evaluate
