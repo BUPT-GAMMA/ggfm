@@ -1,6 +1,6 @@
 import os.path as osp
 from typing import Callable, Optional
-from ggfm.data import graphs as gg
+from ggfm.data import graph as gg
 from ggfm.data.utils import download_url,read_npz
 from ggfm.utils.get_split import get_train_val_test_split
 
