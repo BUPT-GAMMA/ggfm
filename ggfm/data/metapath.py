@@ -1,8 +1,8 @@
-import dgl
+# import dgl
 import torch
 import random
 from .utils import save_pkl_file, open_pkl_file
-from dgl.data.utils import save_graphs, load_graphs
+# from dgl.data.utils import save_graphs, load_graphs
 
 
 def construct_graph(data_dir, graph, src_dst2edge_type):
@@ -81,9 +81,10 @@ def construct_graph(data_dir, graph, src_dst2edge_type):
     for key, values in merged_edges.items():
         merged_edges[key] = (torch.tensor(values[0]), torch.tensor(values[1]))
 
-    g = dgl.heterograph(merged_edges)
-    save_graphs(data_dir + "graph.bin", g)
-    print("graph has been saved!")
+    # g = dgl.heterograph(merged_edges)
+    # save_graphs(data_dir + "graph.bin", g)
+    # print("graph has been saved!")
+    return merged_edges
 
 
 def construct_graph_node_name(data_dir, graph):
@@ -109,7 +110,7 @@ def construct_graph_node_name(data_dir, graph):
     save_pkl_file(data_dir + "graph_node_name.pkl", graph_node_name)
 
 
-def metapath_based_corpus_construction(data_dir, target_type, metapaths, relation, mid_types, labeled_node_idxs, k=2):
+def metapath_based_corpus_construction(g, graph_node_name, target_type, metapaths, relation, mid_types, labeled_node_idxs, k=2):
 
     r"""
 
@@ -117,8 +118,11 @@ def metapath_based_corpus_construction(data_dir, target_type, metapaths, relatio
 
     Parameters
     ----------
-    data_dir: str
-        Data directory for loading graph.bin and graph_node_name.pkl.
+    g: dgl.heterograph
+        Target graph.
+    
+    graph_node_name: dict
+        Node names for each node type.
     
     target_type: str
         Sampled node type.
@@ -141,10 +145,10 @@ def metapath_based_corpus_construction(data_dir, target_type, metapaths, relatio
 
     """
 
-    glist, label_dict = load_graphs(data_dir + "graph.bin")
-    g = glist[0]
+    # glist, label_dict = load_graphs(data_dir + "graph.bin")
+    # g = glist[0]
 
-    graph_node_name = open_pkl_file(data_dir + 'graph_node_name.pkl')
+    # graph_node_name = open_pkl_file(data_dir + 'graph_node_name.pkl')
     metapath = metapaths[target_type]
     relation = relation[target_type]
 
