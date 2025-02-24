@@ -10,35 +10,18 @@ import os
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
-
-from ggfm.models.translator_model.translator_chatglm_arxiv import TranslatorCHATGLMArxiv
+sys.path.append('/home/cwx/workspace/ggfm')
+from ggfm.models.translator_model.translator_chatglm import TranslatorCHATGLMIMDB
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + "/.."))
-from ggfm.data.arxiv_text_pair_datasets import ArxivTextPairDataset
-
+from ggfm.data.text_pair_datasets import TextPairDataset
+from dgl.data.utils import load_graphs
 from ggfm.models import *
+from tqdm import tqdm
+from sklearn.metrics import f1_score
 
 
 torch.backends.cuda.matmul.allow_tf32 = True
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Training")
-    parser.add_argument("--distributed", action='store_const', default=True, const=True)
-    parser.add_argument('--random_seed', type=int, default=42, help="random seed for initialization")
-    parser.add_argument("--num_workers", default=1, type=int)
-    parser.add_argument("--cfg-path", default="/home/ubuntu/workspace/graphtranslator/GraphTranslator/Translator/train/pretrain_arxiv_generate_stage2.yaml", help="path to configuration file.")
-    parser.add_argument(
-        "--options",
-        nargs="+",
-        help="override some settings in the used config, the key-value pair "
-        "in xxx=yyy format will be merged into config file (deprecate), "
-        "change to --cfg-options instead.",
-    )
-
-    args = parser.parse_args()
-
-    return args
 
 
 def setup_seeds(seed):
@@ -63,7 +46,7 @@ def generate(model, train_set, data_loader, generate_prompt, pred_dir, scaler):
 
     pred_txt = open(pred_dir, 'w')
 
-    for network_input in data_loader:
+    for network_input in tqdm(data_loader):
         with torch.cuda.amp.autocast(enabled=use_amp):
             ChatGLM_response = model.generate(network_input, generate_prompt)
 
@@ -75,31 +58,63 @@ def generate(model, train_set, data_loader, generate_prompt, pred_dir, scaler):
 
     pred_txt.close()
 
-def translator_generate():
-    batch_size_eval = 2
-    datasets_dir = "/home/ubuntu/workspace/graphtranslator/GraphTranslator/data/arxiv/summary_embeddings.csv"
-    max_length = 1024
-    bert_dir = '/home/ubuntu/workspace/graphtranslator/ggfm/ggfm/models/bert-base-uncased'
-    llm_dir = '/home/ubuntu/workspace/graphtranslator/GraphTranslator/Translator/models/chatglm2-6b'
+def translator_generate(args):
+    batch_size_eval = args.batch_size
+    datasets_dir = f"/home/cwx/workspace/ggfm/data/summary_embeddings_{args.datasets}_{args.typee}.csv"
+    max_length = 2048
+    bert_dir = '/home/cwx/workspace/ggfm/ggfm/models/bert-base-uncased'
+    llm_dir = '/home/cwx/workspace/ggfm/ggfm/models/chatglm2-6b'
     mode = "train"
     vocab_size = 100000
-    generate_prompt = [
-        '\nQuestion: Please summarize the topic and content of the paper and its citations in English.\nAnswer:',
-        '\nQuestion: Based on the summary of the above paper titled <{}>, please determine into which of the following 40 arXiv CS sub-categories would this paper most likely fall?',
-        'categories: <Artificial Intelligence; Hardware Architecture; Computational Complexity; Computational Engineering, Finance, and Science; Computational Geometry; Computation and Language; Cryptography and Security; Computer Vision and Pattern Recognition; Computers and Society; Databases; Distributed, Parallel, and Cluster Computing; Digital Libraries; Discrete Mathematics; Data Structures and Algorithms; Emerging Technologies; Formal Languages and Automata Theory; General Literature; Graphics; Computer Science and Game Theory; Human-Computer Interaction; Information Retrieval; Information Theory; Machine Learning; Logic in Computer Science; Multiagent Systems; Multimedia; Mathematical Software; Numerical Analysis; Neural and Evolutionary Computing; Networking and Internet Architecture; Other Computer Science; Operating Systems; Performance; Programming Languages; Robotics; Symbolic Computation; Sound; Software Engineering; Social and Information Networks; Systems and Control>',
-        'Please give 5 likely categories, in order from most likely to least likely, and give your reasoning. Provide response in JSON format with the following keys: category, reason. \n\nAnswer:',
-        'Round 0:\n\nQuestion:We are trying to explore the paper titled {}. \n Please summarize the topic and content of the paper and its citations in English \n\nAnswer:{} \n\nRound 1:\n{}'
-    ]
-    pred_dir = "/home/ubuntu/workspace/graphtranslator/GraphTranslator/data/arxiv/pred.txt"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if args.datasets == 'dblp':
+        examples = [
+            'Example 1:\n{"category":"0","reason":"Consistent publications in CVPR with computer vision focus"}\n',
+            'Example 2:\n{"category":"1","reason":"Multiple ACL papers on language modeling"}\n',
+            'Example 3:\n{"category":"2","reason":"NeurIPS papers centered on reinforcement learning"}\n',
+            'Example 4:\n{"category":"0","reason":"ICML works on image generation techniques"}\n',
+            'Example 5:\n{"category":"1","reason":"EMNLP research on semantic parsing"}\n'
+        ]
+        if args.num_example>0:
+            examples = '\n'.join(examples[:args.num_example])
+        else:
+            examples = ''
+        generate_prompt = [
+            '\nQuestion: Analyze the research focus of author <{}> based on their papers:',
+            '\nPaperlist format: conf: paper_title: term\n{}',
+            '\nSelect the single best category from: <0, 1, 2>',
+            f'Output only 1 numeric category with reasoning. Examples: {examples}. Use JSON format with keys: category, reason.',
+            'Round 0:\n\nQuestion: Analyze author {} with papers:\n{}\n\nAnswer:{} \n\nRound 1:\n{}'
+        ]
+    elif args.datasets == 'imdb':
+        examples = [
+            'Example 1:\n{"category":"action","reason":"Dominant combat sequences"}\n',
+            'Example 2:\n{"category":"drama","reason":"Emotional relationship focus"}\n',
+            'Example 3:\n{"category":"comedy","reason":"Meta humor throughout"}\n',
+            'Example 4:\n{"category":"action","reason":"Continuous survival sequences"}\n',
+            'Example 5:\n{"category":"action","reason":"Bullet-time combat scenes"}\n'
+        ]
+        if args.num_example>0:
+            examples = '\n'.join(examples[:args.num_example])
+        else:
+            examples = ''
+        generate_prompt = [
+            '\nQuestion: Please summarize the topic and content of the paper and its citations in English. \nAnswer:',
+            '\nQuestion: Based on the summary of the above movie titled <{}>, carefully analyze its core elements and select the single best match category from these options:',
+            'categories: <comedy, action, drama>',
+            f'Output only 1 category with your reasoning. Answer example: {examples}. Use JSON format with keys: category, reason. Use only English and the specified categories.\n\nAnswer:',
+            'Round 0:\n\nQuestion:We are exploring the movie titled {}. \nSummarize the movie\'s content and citations in English \n\nAnswer:{} \n\nRound 1:\n{}'
+        ]
+    pred_dir = f"/home/cwx/workspace/ggfm/data/pred_{args.output_dir}_{args.datasets}.txt"
+    device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
     # create dataset
-    train_set = ArxivTextPairDataset(datasets_dir, max_length, vocab_size, mode)
+    train_set = TextPairDataset(datasets_dir, max_length, vocab_size, mode)
 
     # create datalaoder
     dataloader = DataLoader(train_set,batch_size=batch_size_eval,pin_memory=True,sampler=None,drop_last=True)
     # create model
-    model = TranslatorCHATGLMArxiv(
+    model = TranslatorCHATGLMIMDB(
         llm_dir=llm_dir,
         bert_dir=bert_dir,
         num_features=768,
@@ -116,15 +131,23 @@ def translator_generate():
 
 
 def get_topk_predictions(node_dict, k):
-    topk_predictions = {}
+    topk_predictions = []
     for node, probabilities in node_dict.items():
-        topk_predictions[node] = probabilities[:k]
+        try:
+            topk_predictions.append(probabilities[0])
+        except:
+            topk_predictions.append(-1)
     return topk_predictions
 
 
-def legality_rate(node2pred):
-    patterns = ["cs.AI", "cs.AR", "cs.CC", "cs.CE", "cs.CG", "cs.CL", "cs.CR", "cs.CV", "cs.CY", "cs.DB", "cs.DC", "cs.DL", "cs.DM", "cs.DS", "cs.ET", "cs.FL", "cs.GL", "cs.GR", "cs.GT", "cs.HC", "cs.IR", "cs.IT", "cs.LG", "cs.LO", "cs.MA", "cs.MM", "cs.MS", "cs.NA", "cs.NE", "cs.NI", "cs.OH", "cs.OS", "cs.PF", "cs.PL", "cs.RO", "cs.SC", "cs.SD", "cs.SE", "cs.SI", "cs.SY", "Artificial Intelligence", "Hardware Architecture", "Computational Complexity", "Computational Engineering, Finance, and Science", "Computational Geometry", "Computation and Language", "Cryptography and Security", "Computer Vision and Pattern Recognition", "Computers and Society", "Databases", "Distributed, Parallel, and Cluster Computing", "Digital Libraries", "Discrete Mathematics", "Data Structures and Algorithms", "Emerging Technologies", "Formal Languages and Automata Theory", "General Literature", "Graphics", "Computer Science and Game Theory", "Human-Computer Interaction", "Information Retrieval", "Information Theory", "Machine Learning", "Logic in Computer Science", "Multiagent Systems", "Multimedia", "Mathematical Software", "Numerical Analysis", "Neural and Evolutionary Computing", "Networking and Internet Architecture", "Other Computer Science", "Operating Systems", "Performance", "Programming Languages", "Robotics", "Symbolic Computation", "Sound", "Software Engineering", "Social and Information Networks", "Systems and Control","Computer Vision","Pattern Recognition"]
-    label_map = {'Numerical Analysis': 0,'Multimedia': 1,'Logic in Computer Science': 2,'Computers and Society': 3,'Cryptography and Security': 4,'Distributed, Parallel, and Cluster Computing': 5,'Human-Computer Interaction': 6,'Computational Engineering, Finance, and Science': 7,'Networking and Internet Architecture': 8,'Computational Complexity': 9,'Artificial Intelligence': 10,'Multiagent Systems': 11,'General Literature': 12,'Neural and Evolutionary Computing': 13,'Symbolic Computation': 14,'Hardware Architecture': 15,'Computer Vision and Pattern Recognition': 16,'Pattern Recognition': 16,'Computer Vision': 16,'Graphics': 17,'Emerging Technologies': 18,'Systems and Control': 19,'Computational Geometry': 20,'Other Computer Science': 21,'Programming Languages': 22,'Software Engineering': 23,'Machine Learning': 24,'Sound': 25,'Social and Information Networks': 26,'Robotics': 27,'Information Theory': 28,'Performance': 29,'Computation and Language': 30,'Information Retrieval': 31,'Mathematical Software': 32,'Formal Languages and Automata Theory': 33,'Data Structures and Algorithms': 34,'Operating Systems': 35,'Computer Science and Game Theory': 36,'Databases': 37,'Digital Libraries': 38,'Discrete Mathematics': 39,'cs.NA': 0,'cs.MM': 1,'cs.LO': 2,'cs.CY': 3,'cs.CR': 4,'cs.DC': 5,'cs.HC': 6,'cs.CE': 7,'cs.NI': 8,'cs.CC': 9,'cs.AI': 10,'cs.MA': 11,'cs.GL': 12,'cs.NE': 13,'cs.SC': 14,'cs.AR': 15,'cs.CV': 16,'cs.GR': 17,'cs.ET': 18,'cs.SY': 19,'cs.CG': 20,'cs.OH': 21,'cs.PL': 22,'cs.SE': 23,'cs.LG': 24,'cs.SD': 25,'cs.SI': 26,'cs.RO': 27,'cs.IT': 28,'cs.PF': 29,'cs.CL': 30,'cs.IR': 31,'cs.MS': 32,'cs.FL': 33,'cs.DS': 34,'cs.OS': 35,'cs.GT': 36,'cs.DB': 37,'cs.DL': 38,'cs.DM': 39}
+def legality_rate(node2pred, args):
+
+    if args.datasets == 'dblp':
+        patterns = ["0", "1", "2"]
+        label_map = {"0": 0, "1": 1, "2": 2}
+    elif args.datasets == 'imdb':
+        patterns = [ "action","comedy", "drama", ]
+        label_map = {"action": 0, "comedy": 1, "drama": 2}
     print("Total class number:", len(patterns))
     assert len(patterns) == len(label_map), "patterns and label_map should have the same size"
 
@@ -160,34 +183,70 @@ def legality_rate(node2pred):
     return node2digitallabel, count
 
 
-def read_data(label_file, pred_file):
-    df_node2label = pd.read_csv(label_file)
-    node2label = dict(zip(df_node2label['node_id'], df_node2label['digital_label']))
+def read_data(label_file, pred_file, args):
+    # df_node2label = pd.read_csv(label_file)
+    graph, label_dict = load_graphs(label_file)
+    g = graph[0]
+    if args.datasets == 'dblp':
+        ty = 'author'
+    elif args.datasets == 'imdb':
+        ty = 'movie'
+    node2label = g.nodes[ty].data['label'][torch.range(0, 1000).long()]
+    # node2label = dict(zip(df_node2label['node_id'], df_node2label['digital_label']))
     df_pred = pd.read_csv(pred_file, sep='\t', names=['node', 'summary', 'pred'])
     node2pred = {}
     for _, row in df_pred.iterrows():
         node = int(row.iloc[0])
         node2pred[node] = row.iloc[2].split("\n")
+        if _ == 1000:
+            break
     return node2label, node2pred
 
 
-def evaluation(label_file, pred_file):
-    node2label, node2pred = read_data(label_file, pred_file)
-    node2digitallabel, count = legality_rate(node2pred)
+def evaluation(label_file, pred_file, args):
+    node2label, node2pred = read_data(label_file, pred_file, args)
+    node2digitallabel, count = legality_rate(node2pred, args)
 
-    for k in [1,3,5]:
-        acc_count = 0
-        node2digitallabel_k = get_topk_predictions(node2digitallabel, k )
-        for node, pred_list in node2digitallabel_k.items():
-            label = node2label[node]
-            if len(pred_list) > 0 and label in pred_list:
-                acc_count += 1
+    # for k in [1,3,5]:
+    k=1
+    acc_count = 0
+    node2digitallabel_k = get_topk_predictions(node2digitallabel, k)
+    # for node, pred_list in enumerate(node2digitallabel_k):
+    #     label = node2label[node]
+    #     if len(pred_list) > 0 and label in pred_list:
+    #         acc_count += 1
+    macro = f1_score(node2digitallabel_k, node2label.tolist()[:len(node2digitallabel_k)], average='macro')
+    micro = f1_score(node2digitallabel_k, node2label.tolist()[:len(node2digitallabel_k)], average='micro')
+    print('macro: ', macro)
+    print('micro: ', micro)
+    # print(f"Top@{k} Accuracy: {round(100*acc_count/count,2) if count > 0 else 0.0}%")
 
-        print(f"Top@{k} Accuracy: {round(100*acc_count/count,2) if count > 0 else 0.0}%")
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Training Script")
+    # 训练参数
+    parser.add_argument("--batch_size", type=int, default=4,
+                      help="Batch size for training (default: 8)")
+    
+    # 设备参数
+    parser.add_argument("--gpu", type=int, default=3,
+                      help="GPU device ID (default: 0)")
+
+    # 实验参数
+    parser.add_argument("--output_dir", type=str, default="example_1",
+                      help="Output directory for checkpoints")
+
+    parser.add_argument("--num_example", type=int, default=5)
+
+    parser.add_argument("--datasets", type=str,default="imdb")
+
+    parser.add_argument("--typee", type=str,default="movie_only")
+    
+    return parser.parse_args()
 
 if __name__ == '__main__':
-    translator_generate()
-    label_file = "/home/ubuntu/workspace/graphtranslator/GraphTranslator/data/arxiv/arxiv_test.csv"
-    pred_file = "/home/ubuntu/workspace/graphtranslator/GraphTranslator/data/arxiv/pred.txt"
-    evaluation(label_file, pred_file)
+    args=parse_args()
+    label_file = f"/home/cwx/workspace/ggfm/data/new_data/{args.datasets}/graph.bin"
+    pred_file = f"/home/cwx/workspace/ggfm/data/pred_{args.output_dir}_{args.datasets}.txt"
+    translator_generate(args)
+    evaluation(label_file, pred_file, args)
