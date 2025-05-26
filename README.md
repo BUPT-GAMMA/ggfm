@@ -1,4 +1,6 @@
-![GGFM](framework.png) is an open-source pipeline for graph foundation model based on PyTorch. We integrate SOTA graph foundation models.
+GGFM is an open-source pipeline for graph foundation model based on PyTorch. We integrate SOTA graph foundation models.
+
+![Framework Overview](./framework.png)
 
 The relevant documentation is available [here](https://ggfm.readthedocs.io/en/latest/).
 It is under development, welcome join us!
